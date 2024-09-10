@@ -1,0 +1,1191 @@
+---
+title: "Assignment_Two"
+format: html
+editor: visual
+author: Byron, Jeremy and Courtney
+cache: true
+---
+
+# [Loading Packages and Cleaning Data]{.underline}
+
+```{r}
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+library(caret)
+library(randomForest)
+library(tidyr)
+library(scales)
+library(factoextra)
+library(reshape2)
+
+data <- read_csv("2.csv")
+
+data <- pivot_longer(data, cols = -c(Province, Station, Category), names_to = "Year", values_to = "Value")
+data <- pivot_wider(data, names_from = Category, values_from = Value)
+data <- na.omit(data)
+
+data$Year <- sub("-.*", "", data$Year)
+data$Year <- format(as.Date(data$Year, format = "%Y"), "%Y")
+data$Total_Crime <- rowSums(data[, 4:30])
+data <- data[data$Total_Crime != 0,]
+
+#https://www.macrotrends.net/global-metrics/countries/ZAF/south-africa/gdp-per-capita
+gdp <- read_csv("gdp.csv")
+sa_pop <- read_csv("population.csv")
+cpi <- read_csv("alcohol_cpi.csv")
+
+data_prov_sum <- data |>
+group_by(Year, Province) |>
+summarise(
+  All_theft_not_mentioned_elsewhere = sum(`All theft not mentioned elsewhere`),
+  Theft_out_of_or_from_motor_vehicle = sum(`Theft out of or from motor vehicle`),
+  Drug_related_crime = sum(`Drug-related crime`),
+  Robbery_with_circumstances = sum(`Robbery with aggravating circumstances`),
+  Common_assault = sum(`Common assault`),
+  Commercial_crime = sum(`Commercial crime`),
+  Burglary_at_residential_premises = sum(`Burglary at residential premises`),
+  Assault_with_intent = sum(`Assault with the intent to inflict grievous bodily harm`),
+  Theft_of_motor_vehicle_and_motorcycle = sum(`Theft of motor vehicle and motorcycle`),
+  Shoplifting = sum(`Shoplifting`),
+  Malicious_damage_to_property = sum(`Malicious damage to property`),
+  Common_robbery = sum(`Common robbery`),
+  Burglary_at_non_residential_premises = sum(`Burglary at non-residential premises`),
+  Sexual_Offences = sum(`Sexual Offences`),
+  Driving_under_the_influence = sum(`Driving under the influence of alcohol or drugs`),
+  Stock_theft = sum(`Stock-theft`),
+  Attempted_murder = sum(`Attempted murder`),
+  Carjacking = sum(`Carjacking`),
+  Robbery_at_non_residential = sum(`Robbery at non-residential premises`),
+  Robbery_at_residential = sum(`Robbery at residential premises`),
+  Murder = sum(`Murder`),
+  Illegal_possession_of_firearms = sum(`Illegal possession of firearms and ammunition`),
+  Arson = sum(`Arson`),
+  Truck_hijacking = sum(`Truck hijacking`),
+  Robbery_of_cash_in_transit = sum(`Robbery of cash in transit`),
+  Bank_robbery = sum(`Bank robbery`),
+  Sexual_offences_as_result_of_police_action = sum(`Sexual offences as result of police action`),
+  Total_Crime = sum(`Total_Crime`),
+  .groups = "drop"
+) |> 
+    mutate(Total_Theft = rowSums(select(cur_data(), c(
+    All_theft_not_mentioned_elsewhere,
+    Theft_out_of_or_from_motor_vehicle,
+    Robbery_with_circumstances,
+    Burglary_at_residential_premises,
+    Theft_of_motor_vehicle_and_motorcycle,
+    Shoplifting,
+    Common_robbery,
+    Burglary_at_non_residential_premises,
+    Stock_theft,
+    Carjacking,
+    Robbery_at_non_residential,
+    Robbery_at_residential,
+    Truck_hijacking,
+    Robbery_of_cash_in_transit,
+    Bank_robbery
+  ))))
+
+data_year_sum <- data |>
+group_by(Year) |>
+summarise(
+  All_theft_not_mentioned_elsewhere = sum(`All theft not mentioned elsewhere`),
+  Theft_out_of_or_from_motor_vehicle = sum(`Theft out of or from motor vehicle`),
+  Drug_related_crime = sum(`Drug-related crime`),
+  Robbery_with_circumstances = sum(`Robbery with aggravating circumstances`),
+  Common_assault = sum(`Common assault`),
+  Commercial_crime = sum(`Commercial crime`),
+  Burglary_at_residential_premises = sum(`Burglary at residential premises`),
+  Assault_with_intent = sum(`Assault with the intent to inflict grievous bodily harm`),
+  Theft_of_motor_vehicle_and_motorcycle = sum(`Theft of motor vehicle and motorcycle`),
+  Shoplifting = sum(`Shoplifting`),
+  Malicious_damage_to_property = sum(`Malicious damage to property`),
+  Common_robbery = sum(`Common robbery`),
+  Burglary_at_non_residential_premises = sum(`Burglary at non-residential premises`),
+  Sexual_Offences = sum(`Sexual Offences`),
+  Driving_under_the_influence = sum(`Driving under the influence of alcohol or drugs`),
+  Stock_theft = sum(`Stock-theft`),
+  Attempted_murder = sum(`Attempted murder`),
+  Carjacking = sum(`Carjacking`),
+  Robbery_at_non_residential = sum(`Robbery at non-residential premises`),
+  Robbery_at_residential = sum(`Robbery at residential premises`),
+  Murder = sum(`Murder`),
+  Illegal_possession_of_firearms = sum(`Illegal possession of firearms and ammunition`),
+  Arson = sum(`Arson`),
+  Truck_hijacking = sum(`Truck hijacking`),
+  Robbery_of_cash_in_transit = sum(`Robbery of cash in transit`),
+  Bank_robbery = sum(`Bank robbery`),
+  Sexual_offences_as_result_of_police_action = sum(`Sexual offences as result of police action`),
+  Total_Crime = sum(`Total_Crime`)
+) |> 
+    mutate(Total_Theft = rowSums(select(cur_data(), c(
+    All_theft_not_mentioned_elsewhere,
+    Theft_out_of_or_from_motor_vehicle,
+    Robbery_with_circumstances,
+    Burglary_at_residential_premises,
+    Theft_of_motor_vehicle_and_motorcycle,
+    Shoplifting,
+    Common_robbery,
+    Burglary_at_non_residential_premises,
+    Stock_theft,
+    Carjacking,
+    Robbery_at_non_residential,
+    Robbery_at_residential,
+    Truck_hijacking,
+    Robbery_of_cash_in_transit,
+    Bank_robbery
+  ))))
+
+gdp <- gdp |> 
+  mutate(date = dmy(date)) |> 
+  mutate(Year = year(date))
+
+data_prov_sum$Year <- as.numeric(data_prov_sum$Year)
+
+sa_pop$Year <- as.numeric(sa_pop$Year)
+influence_data <- inner_join(gdp, sa_pop, by = "Year")
+influence_data <- select(influence_data, -4)
+
+data_sum_econ <- inner_join(influence_data, data_prov_sum, by = "Year")
+data_sum_econ <- data_sum_econ |> 
+  rename(
+    GDP_Per_Cap = `GDP Per Capita (US $)`,
+    Growth_Rate = `Annual Growth Rate (%)`
+  )
+data_sum_econ <- inner_join(data_sum_econ, cpi, by = "Year")
+#this is now a data set with ALL Crime summarised by year, province + population and gdp
+
+data_year_sum$Year <- as.numeric(data_year_sum$Year)
+data_sum_y_econ <- inner_join(data_year_sum, influence_data, by = "Year")
+data_sum_y_econ <- data_sum_y_econ |> 
+  rename(
+    GDP_Per_Cap = `GDP Per Capita (US $)`,
+    Growth_Rate = `Annual Growth Rate (%)`
+  )
+data_sum_y_econ <- inner_join(data_sum_y_econ, cpi, by = "Year")
+#this data is all crime summarised by year + population and gdp
+
+data$Year <- as.numeric(data$Year)
+data_unsum_econ <- inner_join(data,influence_data, by = "Year")
+data_unsum_econ <- data_unsum_econ |> 
+  rename(
+    GDP_Per_Cap = `GDP Per Capita (US $)`,
+    Growth_Rate = `Annual Growth Rate (%)`
+  )
+data_unsum_econ <- inner_join(data_unsum_econ, cpi, by = "Year")
+#this data is all crime (unsummarised) + population and gdp
+
+#Grouping data by Province and Year in a new Dataset
+crime_summary_per_year <- data |>
+  group_by(Province, Year) |>
+  summarise(Total_Crimes = sum(Total_Crime, na.rm = TRUE))
+
+#Creating a Large List for each years data
+years <- 2005:2015
+yearly_data_frames <- list()
+for (year in years) {
+  year_data <- subset(data, Year == year)
+  yearly_data_frames[[as.character(year)]] <- year_data
+}
+
+Province <- c("Gauteng", "Western Cape", "Kwazulu Natal", "Eastern Cape", "Free State", "Mpumalanga", "North West", "Limpopo", "Northern Cape")
+Population <- c(12272263, 5822634, 10267300, 6562053, 2745590, 4039939, 3509953, 5404868, 1145861)
+
+province_population <- data.frame(Province, Population)
+```
+
+# [**EDA:**]{.underline}
+
+```{r}
+# Summary statistics
+# summary(data)
+# str(data)
+
+kzn_data <- subset(data_prov_sum, Province == "Kwazulu/Natal")
+western_cape_data <- subset(data_prov_sum, Province == "Western Cape")
+# Perform independent two-sample t-test
+result <- t.test(kzn_data$Total_Crime, western_cape_data$Total_Crime)
+print(result)
+# t = -7.0225, df = 10.888, p-value = 2.325e-05
+# alternative hypothesis: true difference in means is not equal to 0
+# 95 percent confidence interval:
+#  -117434.26  -61334.65
+# sample estimates:
+# mean of x mean of y 
+#  346263.5  435647.9 
+# reject the null hypothesis that the mean Total Crime in KZN is equal to the mean Total Crime in Western Cape. Instead, the data suggests that there is a significant difference between the mean Total Crime in these two provinces. Specifically, Total Crime appears to be lower in KZN compared to Western Cape
+
+correlation_test <- cor.test(data_sum_y_econ$Total_Crime, data_sum_y_econ$GDP_Per_Cap)
+print(correlation_test)
+# t = -0.79906, df = 9, p-value = 0.4448
+# alternative hypothesis: true correlation is not equal to 0
+# 95 percent confidence interval:
+#  -0.7426009  0.4050294
+# sample estimates:
+#        cor 
+# -0.2573806 
+#Pearson correlation coefficient of -0.257. However, p-value of 0.4448, therefore not significant. 
+
+correlation_test <- cor.test(data_sum_y_econ$`Alcohol CPI`, data_sum_y_econ$Driving_under_the_influence)
+print(correlation_test)
+# t = 4.0349, df = 9, p-value = 0.002951
+# alternative hypothesis: true correlation is not equal to 0
+# 95 percent confidence interval:
+#  0.3907027 0.9466539
+# sample estimates:
+#       cor 
+# 0.8024948 
+#indicates strong evidence to suggest a significant positive linear relationship
+
+correlation_test <- cor.test(data_sum_y_econ$`GDP_Per_Cap`, data_sum_y_econ$Driving_under_the_influence)
+print(correlation_test)
+#t = 2.1907, df = 9, p-value = 0.05619
+# alternative hypothesis: true correlation is not equal to 0
+# 95 percent confidence interval:
+#  -0.01570056  0.87873821
+# sample estimates:
+#       cor 
+# 0.5897287 
+#moderate positive correlation (0.5897) 
+#not statistically significant (p-value is above 0.05).
+
+correlation_test <- cor.test(data_sum_y_econ$Total_Theft, data_sum_y_econ$Population)
+print(correlation_test)
+# data:  data_sum_y_econ$Total_Theft and data_sum_y_econ$Population
+# t = -1.5143, df = 9, p-value = 0.1643
+# alternative hypothesis: true correlation is not equal to 0
+# 95 percent confidence interval:
+#  -0.8269527  0.2045571
+# sample estimates:
+#        cor 
+# -0.4506119 
+#there is a correlation but not a strong one, suggesting other factors for change in theft. 
+
+#This creates a crimethreshold which shows for each year if a province was above or below the threshold, making it a high or low crime.
+crime_thresholds <-
+  quantile(crime_summary_per_year$Total_Crimes, probs = c(0.75))
+
+crime_summary_per_year$Crime_Category <-
+  ifelse(crime_summary_per_year$Total_Crimes >= crime_thresholds,
+     	"High Crime",
+     	"Low Crime")
+
+#This list shows you what the threshold is for each province at each year
+high_crime_provinces <-
+  crime_summary_per_year$Province[crime_summary_per_year$Crime_Category == "High Crime"]
+
+low_crime_provinces <-
+  crime_summary_per_year$Province[crime_summary_per_year$Crime_Category == "Low Crime"]
+
+thresholds <- crime_summary_per_year |>
+  group_by(Year) |>
+  summarise(Threshold = quantile(Total_Crimes, probs = 0.75, na.rm = TRUE))
+
+crime_summary_with_thresholds <-
+  left_join(crime_summary_per_year, thresholds, by = "Year")
+
+crime_summary_with_thresholds <- crime_summary_with_thresholds  |>
+  mutate(Crime_Category = ifelse(Total_Crimes >= Threshold, "High Crime", "Low Crime"))
+
+print(crime_summary_with_thresholds)
+
+```
+
+## **Graphs:**
+
+```{r}
+ggplot(data, aes(x = Year, y = Total_Crime)) +
+  geom_bar(stat = "identity", fill = "darkgreen") +
+  labs(title = "Total Crime by Year", x = "Year", y = "Total Crime") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 16, face = "bold"),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14, face = "bold"))
+#this is not good, we should look at if who runs these provinces is connected to crime levels
+
+ggplot(data_prov_sum, aes(x = Total_Crime , y = reorder(Province, Total_Crime))) +
+  geom_bar(stat = "identity", fill = "darkblue") +
+  labs(title = "Total Crime by Province", x = "Total Crime", y = "Province") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 16, face = "bold"),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14, face = "bold")) +
+  scale_x_continuous(labels = scales::comma)
+  
+ggplot(data, aes(x =`Sexual Offences` , y = reorder(Province, `Sexual Offences`))) +
+  geom_bar(stat = "identity", fill = "darkred") +
+  labs(title = "Sexual Crime by Province", x = "Sexual Crime", y = "Province") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 16, face = "bold"),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14, face = "bold")) +
+  scale_x_continuous(labels = scales::comma)
+#Gauteng has largest population so it makes sense. Eastern Cape is a problem area.
+
+ggplot(data_sum_y_econ, aes(x = Year, y = 100*(Driving_under_the_influence/Population))) +
+  geom_point() +
+  geom_smooth(method = "loess", se = FALSE, fullrange = TRUE) +
+  theme_minimal() +
+  labs(title = "Percentage of the Population Driving under the Influence", x = "Year", y = "Percentage") +
+  theme(plot.title = element_text(size = 16, face = "bold"),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14, face = "bold"))
+#why is this increasing? What else is driving under the influence correlated with?
+
+ggplot(data = data_sum_y_econ, aes(x = GDP_Per_Cap, y = 100*Total_Theft)) +
+  geom_point(alpha = 0.3) + 
+  geom_smooth(method = "lm", color = "darkorange") +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  theme_minimal() +
+  labs(title = "Correlation between Theft and GDP Per Capita", x = "GDP Per Capita", y = "Total Theft") +
+  theme(plot.title = element_text(size = 16, face = "bold"),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14, face = "bold"))
+#correlation is evident
+
+#This is a graph which shows how many provinces over all the years were high and low crime areas
+ggplot(crime_summary_per_year,
+   	aes(x = Crime_Category, fill = Crime_Category)) +
+  geom_bar() +
+  labs(title = "Distribution of Crime Categories Across Provinces",
+   	x = "Crime Category",
+   	y = "Number of Provinces")
+
+#This is a graph which shows how many provinces specifically in 2015 were high and low crime areas
+desired_year <- 2015
+
+
+filtered_data <- crime_summary_per_year |> 
+  filter(Year == desired_year)
+
+
+plot <- ggplot(filtered_data,
+           	aes(x = Crime_Category, fill = Crime_Category)) +
+  geom_bar() +
+  labs(
+	title = paste(
+  	"Distribution of Crime Categories Across Provinces for Year",
+  	desired_year
+	),
+	x = "Crime Category",
+	y = "Number of Provinces"
+  )
+print(plot)
+
+
+#This list shows you what the threshold is for each province at each year
+high_crime_provinces <-
+  crime_summary_per_year$Province[crime_summary_per_year$Crime_Category == "High Crime"]
+
+low_crime_provinces <-
+  crime_summary_per_year$Province[crime_summary_per_year$Crime_Category == "Low Crime"]
+
+thresholds <- crime_summary_per_year |>
+  group_by(Year) |>
+  summarise(Threshold = quantile(Total_Crimes, probs = 0.75, na.rm = TRUE))
+
+crime_summary_with_thresholds <-
+  left_join(crime_summary_per_year, thresholds, by = "Year")
+
+crime_summary_with_thresholds <- crime_summary_with_thresholds  |>
+  mutate(Crime_Category = ifelse(Total_Crimes >= Threshold, "High Crime", "Low Crime"))
+
+print(crime_summary_with_thresholds)
+
+#This graph shows how much each type of crime influenced each years crime statistics, divided between each province for the years 2005 - 2015
+crime_data_high_long <- data  |>
+  pivot_longer(
+	cols = -c(Province, Station, Year),
+	names_to = "Crime_Type",
+	values_to = "Value"
+  )
+
+
+crime_totals <- crime_data_high_long  |>
+  group_by(Province, Year) |>
+  summarise(Total_Crimes = sum(Value), .groups = "drop")
+
+
+crime_data_high_long <- crime_data_high_long  |>
+  left_join(crime_totals, by = c("Province", "Year"))
+
+divide_and_format = function(x) {
+  formatted_labels = format(x / 10000, big.mark = ",", scientific = FALSE)
+  return(formatted_labels)
+}
+
+
+ggplot(crime_data_high_long,
+   	aes(x = Province, y = Total_Crimes, fill = Crime_Type)) +
+  geom_bar(stat = "identity", position = "stack") +
+  facet_wrap( ~ Year, scales = "free_x") +
+  labs(title = "Distribution of Crime Types Across Provinces for Years 2005 - 2015",
+   	x = "Province",
+   	y = "Total Count of Crimes",
+   	fill = "Crime Type") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_y_continuous(labels = divide_and_format)
+
+#This shows the general trend over the years 2005 to 2015 of how many crimes are committed in each province
+ggplot(crime_summary_per_year, aes(x = Year, y = Total_Crimes, group = Province, color = Province)) +
+  geom_line() +
+  labs(title = "Temporal Trend of Total Crimes Across Provinces",
+   	x = "Year",
+   	y = "Total Crimes",
+   	color = "Province") +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::comma)
+
+murder <- data |>
+  filter(Year == 2011) |>
+  select(Murder, Station) |>
+  group_by(Station) |>
+  summarize(Murder = sum(Murder, na.rm = TRUE)) |>
+  top_n(10, Murder)
+
+ggplot(murder, aes(x = reorder(Station, Murder), y = Murder)) +
+  geom_bar(stat = "identity",
+           fill = "skyblue",
+           color = "black") +
+  theme_minimal() +
+  labs(x = "Station", y = "Murder") +
+  ggtitle("Total Murder per Station in 2011") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))   
+
+attemptedmurder <- data |>
+  filter(Year == 2011) |>
+  select(`Attempted murder`, Station) |>
+  group_by(Station) |>
+  summarize(`Attempted murder` = sum(`Attempted murder`, na.rm = TRUE)) |>
+  top_n(10, `Attempted murder`)
+
+ggplot(attemptedmurder, aes(x = reorder(Station, `Attempted murder`), y = `Attempted murder`)) +
+  geom_bar(stat = "identity",
+           fill = "skyblue",
+           color = "black") +
+  theme_minimal() +
+  labs(x = "Station", y = "Murder") +
+  ggtitle("Total Attempted Murder per Station in 2011") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+assault <- data |>
+  filter(Year == 2011) |>
+  select(`Assault with the intent to inflict grievous bodily harm`, Station) |>
+  group_by(Station) |>
+  summarize(
+    `Assault with the intent to inflict grievous bodily harm` = sum(`Assault with the intent to inflict grievous bodily harm`, na.rm = TRUE)
+  ) |>
+  top_n(10, `Assault with the intent to inflict grievous bodily harm`)
+
+ggplot(assault,
+       aes(
+         x = reorder(Station, `Assault with the intent to inflict grievous bodily harm`),
+         y = `Assault with the intent to inflict grievous bodily harm`
+       )) +
+  geom_bar(stat = "identity",
+           fill = "skyblue",
+           color = "black") +
+  theme_minimal() +
+  labs(x = "Station", y = "Assault with the intent to inflict grievous bodily harm") +
+  ggtitle("Total Assault with the intent to inflict grievous bodily harm in 2011") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+sexualoffences <- data |>
+  filter(Year == 2011) |>
+  select(`Sexual Offences`, Station) |>
+  group_by(Station) |>
+  summarize(`Sexual Offences` = sum(`Sexual Offences`, na.rm = TRUE)) |>
+  top_n(10, `Sexual Offences`)
+
+ggplot(sexualoffences, aes(x = reorder(Station, `Sexual Offences`), y = `Sexual Offences`)) +
+  geom_bar(stat = "identity",
+           fill = "skyblue",
+           color = "black") +
+  theme_minimal() +
+  labs(x = "Station", y = "Sexual Offences") +  # Corrected y-axis label
+  ggtitle("Total Sexual Offences per Station in 2011") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+TotalCrime <- data |>
+  filter(Year == 2011) |>
+  select(Total_Crime, Station) |>
+  group_by(Station) |>
+  summarize(Total_Crime = sum(Total_Crime, na.rm = TRUE)) |>
+  top_n(10, Total_Crime)
+
+ggplot(TotalCrime, aes(x = reorder(Station, Total_Crime), y = Total_Crime)) +
+  geom_bar(stat = "identity",
+           fill = "skyblue",
+           color = "black") +
+  theme_minimal() +
+  labs(x = "Station", y = "Total Crime") +
+  ggtitle("Total Crime in 2011") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+```
+
+# [**Linear Regression Model of GDP VS Theft:**]{.underline}
+
+## **Linear Regression:**
+
+```{r}
+TT_model <- lm(Total_Theft 
+                ~ 
+                  GDP_Per_Cap +
+                  CPI +
+                  `Alcohol CPI`
+                , data = data_sum_y_econ)
+#a model of the non-violent types of theft.
+summary(TT_model)
+# Residual standard error: 20530 on 7 degrees of freedom
+# Multiple R-squared:  0.7209,	Adjusted R-squared:  0.6013 
+# F-statistic: 6.028 on 3 and 7 DF,  p-value: 0.02364
+
+#CPI and Alcohol CPI are not significant.
+#Therefore will now see which theft GDP has biggest correlations with
+```
+
+## **Refined Linear Regression:**
+
+```{r}
+ovr_model <- lm(GDP_Per_Cap 
+                ~ 
+                  Robbery_with_circumstances + 
+                  Burglary_at_residential_premises + 
+                  Shoplifting + 
+                  Burglary_at_non_residential_premises + 
+                  Stock_theft 
+                , data = data_sum_y_econ)
+#a model of the non-violent types of theft.
+summary(ovr_model)
+# (Intercept)                           1.871e+04  6.226e+03   3.005  0.02992 * 
+# Robbery_with_circumstances           -8.400e-02  1.257e-02  -6.683  0.00113 **
+# Burglary_at_residential_premises     -7.673e-03  1.305e-02  -0.588  0.58215   
+# Shoplifting                          -5.548e-02  3.458e-02  -1.604  0.16953   
+# Burglary_at_non_residential_premises  8.041e-02  2.630e-02   3.057  0.02820 * 
+# Stock_theft                          -5.463e-02  1.817e-01  -0.301  0.77570   
+# Residual standard error: 320.7 on 5 degrees of freedom
+# Multiple R-squared:  0.9447,	Adjusted R-squared:  0.8893 
+# F-statistic: 17.07 on 5 and 5 DF,  p-value: 0.003682
+
+model1 <- lm(GDP_Per_Cap 
+                ~ 
+                  Robbery_with_circumstances + 
+                  Burglary_at_non_residential_premises 
+                , data = data_sum_y_econ)
+# A model of the significant p valued var
+summary(model1)
+#R squared = 78%
+
+model2 <- lm(GDP_Per_Cap 
+                ~ 
+                  Robbery_with_circumstances + 
+                  Shoplifting + 
+                  Stock_theft 
+                , data = data_sum_y_econ)
+#a model of possibly needs based crimes
+#shoplifting does not contribute much to explaining variance. 
+summary(model2)
+#83%
+
+model3 <- lm(GDP_Per_Cap 
+                ~ 
+                  Robbery_with_circumstances +
+                  Stock_theft 
+                , data = data_sum_y_econ)
+#a model of possibly needs based crimes - minus shoplifting
+summary(model3)
+#81%
+
+model4 <- lm(GDP_Per_Cap 
+                ~ 
+                  Robbery_with_circumstances + 
+                  Burglary_at_non_residential_premises + 
+                  Stock_theft 
+                , data = data_sum_y_econ)
+#a model of possibly needs based crimes (assuming burlargy can be in that category)
+#shoplifting does not contribute much to explaining variance. 
+summary(model4)
+#R = 91%
+
+#Model 2 or Model 4 are the best. 
+
+# All_theft_not_mentioned_elsewhere + 
+#                   Theft_out_of_or_from_motor_vehicle + 
+#                   Robbery_with_circumstances + 
+#                   Burglary_at_residential_premises + 
+#                   Theft_of_motor_vehicle_and_motorcycle + 
+#                   Shoplifting + 
+#                   Common_robbery + 
+#                   Burglary_at_non_residential_premises + 
+#                   Stock_theft + 
+#                   Carjacking + 
+#                   Robbery_at_non_residential_premises + 
+#                   Robbery_at_residential_premises + 
+#                   Truck_hijacking + 
+#                   Robbery_of_cash_in_transit + 
+#                   Bank_robbery
+```
+
+## **Machine Learning Approach:**
+
+```{r}
+set.seed(7)
+index <- createDataPartition(data_sum_y_econ$GDP_Per_Cap, p = 0.6, list = FALSE)
+
+training <- data_sum_y_econ[index, ]
+testing <- data_sum_y_econ[-index, ]
+
+# Train the linear regression model on the training data
+model2_ml <- lm(GDP_Per_Cap ~ 
+                  Robbery_with_circumstances + 
+                  Shoplifting + 
+                  Stock_theft 
+                , data = training)
+summary(model2_ml)
+# Residual standard error: 517.1 on 4 degrees of freedom
+# Multiple R-squared:  0.856,	Adjusted R-squared:  0.7479 
+# F-statistic: 7.924 on 3 and 4 DF,  p-value: 0.03698
+
+# Predict the GDP_Per_Cap on the testing data
+predictions <- predict(model2_ml, newdata = testing)
+
+mse <- mean((predictions - testing$GDP_Per_Cap)^2)
+mse
+#[1] 162676
+#This value represents the average squared error of the model's predictions on the testing data
+#Lower values of MSE indicate better performance, as they represent smaller prediction errors.
+
+rsq <- 1 - sum((predictions - testing$GDP_Per_Cap)^2) / sum((testing$GDP_Per_Cap - mean(testing$GDP_Per_Cap))^2)
+rsq
+#[1] 0.8187619
+#explains 81.8% of variance
+
+
+ggplot(testing, aes(x = GDP_Per_Cap, y = predictions)) +
+  geom_point(color = "darkgreen") +
+  geom_abline(intercept = 0, slope = 1, color = "orange") +
+  labs(x = "Actual GDP", y = "Predicted GDP", title = "Actual vs Predicted GDP Per Capita") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 16, face = "bold"),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14, face = "bold"))
+```
+
+# [**Linear Regression Model of Correlations with Driving Under the Influence:**]{.underline}
+
+```{r}
+inf_model <- lm(Driving_under_the_influence 
+                ~ 
+                  CPI + 
+                  `Alcohol CPI` 
+                , data = data_sum_y_econ)
+# A model of the significant p valued var
+summary(inf_model)
+#R squared = 77%
+# Residual standard error: 7619 on 8 degrees of freedom
+# Multiple R-squared:  0.7726,	Adjusted R-squared:  0.7158 
+# F-statistic: 13.59 on 2 and 8 DF,  p-value: 0.002673
+#alcohol CPI shows a correlation (p value = 0.0221 )
+
+#the summary suggests little/no relation between driving under the influence and CPI.
+#Meaning that people are not driving under hte influence more due to increased cost of living. 
+
+ggplot(data = data_sum_y_econ, aes(x = Driving_under_the_influence, y = `Alcohol CPI`)) +
+  geom_point(color = "darkblue", alpha = 0.7) + 
+  geom_smooth(method = "lm", color = "orange", fill = "lightblue", alpha = 0.2) + 
+  labs(title = "Driving Under the Influence VS the Alcohol CPI", 
+       x = "Driving Under the Influence", 
+       y = "Alcohol CPI") +  
+  theme_minimal() +  
+  theme(plot.title = element_text(size = 16, face = "bold"),  
+        axis.text = element_text(size = 12),  
+        axis.title = element_text(size = 14, face = "bold"))
+#People are driving under the influence more despite the alcohol pice increasing!
+#i.e., increasing the price of alcohol will not deter drunk driving. 
+```
+
+## Classification Model on High and Low Crime Areas:
+
+```{r}
+#Creating a classification model, using numbers 1 and 0 for high crime and low crime respectively, I then trained the data through randomforest to show a confusion matrix
+crime_summary_per_year$Crime_Label <-
+  ifelse(crime_summary_per_year$Crime_Category == "High Crime", 1, 0)
+
+features <- crime_summary_per_year |>
+  select(-c(Province, Total_Crimes, Crime_Category, Crime_Label))
+
+target <- crime_summary_per_year$Crime_Label
+
+set.seed(123)
+
+train_index <- createDataPartition(target, p = 0.7, list = FALSE)
+train_data <- features[train_index,]
+train_target <- target[train_index]
+train_target <- factor(train_target, levels = c(0, 1), labels = c("Low Crime", "High Crime"))
+test_data <- features[-train_index,]
+test_target <- target[-train_index]
+
+model <-
+  randomForest(
+	x = train_data,
+	y = train_target,
+	type = "classification",
+	ntree = 500,
+	mtry = 1
+  )
+
+print(model)
+
+#This then shows prediction, with a accuracy of 93% of whether a province will contain high or low levels of crime
+model <- randomForest(train_data, train_target)
+
+predictions <- predict(model, test_data)
+
+conf_matrix <- table(predictions, test_target)
+accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+
+print("Confusion Matrix:")
+print(conf_matrix)
+print(paste("Accuracy:", round(accuracy, 4)))
+
+```
+
+```{r}
+#EDA 7: This shows a frequency graph of the model, showing the accuracy between the predictions and actual data
+conf_matrix_df <- as.data.frame(conf_matrix)
+
+ggplot(conf_matrix_df, aes(x = predictions, y = test_target, fill = Freq)) +
+  geom_tile() +
+  labs(title = "Confusion Matrix",
+   	x = "Predicted",
+   	y = "Actual",
+   	fill = "Frequency") +
+  theme_minimal()
+
+#This bar graph shows the mistakes the prediction model made, compared to the actual data
+prediction_df <- data.frame(Actual = test_target, Predicted = predictions)
+
+plot1 <- ggplot(prediction_df, aes(x = Actual, fill = Predicted)) +
+  geom_bar() +
+  labs(title = "Model Prediction vs. Actual Crime Category",
+   	x = "Actual Category",
+   	fill = "Predicted Category") +
+  theme_minimal()
+
+plot1 +
+  theme(axis.text.x = element_blank())
+
+```
+
+## Clustering Model on Highest Violent-Crime Stations:
+
+For this section, we decided to focus on violent crimes. These are Murder, Attempted Murder, Sexual Offences, and Assault with the intent to inflict grievous bodily harm. We wanted to find out which Police Stations across South Africa had the highest rates for these crimes. To do this, we decided to filter the year to 2011, as it was the year when census data was available for more information to perform interpretation. We then decided to create bar graphs in order to see the highest 10 stations for each crime. After doing this, we could see that there were certain stations that were in the top 10 for each crime. We then decided to perform clustering analysis in order to see what stations were similar when all the crimes were taken into consideration.
+
+To perform clustering analysis, we took our original data and filtered it to the year 2011. We then selected the violent crimes. We scaled the data to ensure that each variable was comparable. We then plotted the WSS against different clusters to find the optimal number of clusters to use, which was 5 clusters. We then performed clustering analysis and visualized them on two fviz_cluster graphs. One of them includes names for the stations and the other one just plots points.
+
+```{r}
+TotalClusteringCrime <- data |>
+  filter(Year == 2011) |>
+  select(
+    Station,
+    Murder,
+    `Attempted murder`,
+    `Assault with the intent to inflict grievous bodily harm`,
+    `Sexual Offences`
+  ) |>
+  group_by(Station) |>
+  column_to_rownames(var = "Station") |>
+  scale()
+
+wss = list()
+for (i in 1:15) {
+  km.out = kmeans(TotalClusteringCrime,
+                  centers = i,
+                  nstart = 25)
+  wss[[i]] = tibble(k = i, ss = km.out$tot.withinss)
+}
+wss = bind_rows(wss)
+ggplot(wss, aes(x = k, y = ss)) +
+  geom_line() + geom_point() +
+  xlab("Number of Clusters") +
+  ylab("Within groups sum of squares")
+
+set.seed(75)
+km.res = kmeans(TotalClusteringCrime, 5, nstart = 25)
+print(km.res)
+
+fviz_cluster(
+  km.res,
+  TotalClusteringCrime,
+  ellipse.type = "convex",
+  geom = c("point"),
+  palette = "jco",
+  ggtheme = theme_classic()
+)
+
+fviz_cluster(km.res, TotalClusteringCrime, ellipse.type = "convex")
+```
+
+Looking at the clusters, we can clearly see stations that are similar to each other. In order to figure out why these stations are related, we decided to pick 5 random stations from each cluster and gather extra data on these stations. We found the data on the StatsSA website, and manually created a data frame for these stations. We then joined the new data frame to the orignal data frame, so that analysis could be done.
+
+```{r}
+cluster_assignments <- km.res$cluster
+
+sampled_stations <- list()
+
+for (i in 1:max(cluster_assignments)) {
+  stations_in_cluster <- rownames(TotalClusteringCrime)[cluster_assignments == i]
+  
+  sampled_stations_in_cluster <- sample(stations_in_cluster, 5, replace = FALSE)
+  
+  sampled_stations[[i]] <- sampled_stations_in_cluster
+}
+
+sampled_stations_df <- do.call(rbind, sampled_stations)
+
+print(sampled_stations_df) 
+```
+
+```{r}
+RandomStations <- data |>
+  filter(Year == 2011) |>
+  filter(
+    Station %in% c(
+      "Mount Ayliff",
+      "Botlokwa",
+      "Dundee",
+      "Ntambanana",
+      "Dennilton",
+      "Tarkastad",
+      "Cedarville",
+      "Cyferskuil",
+      "Balfour",
+      "Elliot",
+      "Ngqamakhwe",
+      "Ermelo",
+      "Maake",
+      "Mount Frere",
+      "Dutywa",
+      "Inanda",
+      "Umlazi",
+      "Mitchells Plain",
+      "Nyanga",
+      "Gugulethu",
+      "Thohoyandou",
+      "Worcester",
+      "Randfontein",
+      "Ikageng",
+      "Evaton"
+    )
+  )
+```
+
+```{r}
+Station <- c(
+  "Mount Ayliff",
+  "Botlokwa",
+  "Dundee",
+  "Ntambanana",
+  "Dennilton",
+  "Tarkastad",
+  "Cedarville",
+  "Cyferskuil",
+  "Balfour",
+  "Elliot",
+  "Ngqamakhwe",
+  "Ermelo",
+  "Maake",
+  "Mount Frere",
+  "Dutywa",
+  "Inanda",
+  "Umlazi",
+  "Mitchells Plain",
+  "Nyanga",
+  "Gugulethu",
+  "Thohoyandou",
+  "Worcester",
+  "Randfontein",
+  "Ikageng",
+  "Evaton"
+)
+population <- c(
+  5367,
+  20439,
+  34924,
+  3678,
+  2408,
+  1604,
+  4412,
+  6269,
+  3201,
+  14376,
+  1558,
+  83865,
+  3583,
+  5252,
+  11076,
+  10032,
+  404811,
+  310485,
+  57996,
+  98468,
+  69453,
+  78906,
+  80492,
+  87701,
+  132851
+)
+population_density <- c(
+  1615,
+  1517,
+  719,
+  216,
+  221,
+  20,
+  356,
+  1996,
+  265,
+  498,
+  1059,
+  1767,
+  1056,
+  1486,
+  532,
+  8250,
+  8530,
+  7096,
+  18775,
+  15162,
+  1629,
+  1110,
+  432,
+  4952,
+  4682
+)
+modal_income <- c(
+  153800,
+  19600,
+  19600,
+  38200,
+  19600,
+  19600,
+  38200,
+  19600,
+  307600,
+  19600,
+  19600,
+  38200,
+  3820,
+  1538000,
+  19600,
+  38200,
+  38200,
+  153800,
+  38200,
+  38200,
+  19600,
+  76400,
+  307600,
+  38200,
+  38200
+)
+matric_20plus <- c(
+  28.1,
+  20.8,
+  35.1,
+  30.7,
+  24.7,
+  24.8,
+  18.4,
+  21.5,
+  44.8,
+  15.9,
+  23,
+  34.8,
+  11.8,
+  38.2,
+  31.6,
+  30.3,
+  40,
+  28.6,
+  25.3,
+  31.5,
+  29.7,
+  38.2,
+  34.2,
+  26.8,
+  29.5
+)
+
+newdf <- data.frame(Station,
+                    population,
+                    population_density,
+                    modal_income,
+                    matric_20plus)
+```
+
+```{r}
+observation_data <- left_join(RandomStations, newdf, by = "Station") 
+```
+
+To perform analysis, we decided to create scatter plots using the different variables, for each station. We also looked at the summary statistics for each relationship.
+
+#### Population Density vs Violent Crimes
+
+```{r}
+ggplot(observation_data,
+       aes(x = population_density, y = Murder, color = Station)) +
+  geom_point() +
+  geom_smooth(
+    method = lm,
+    linewidth = 1,
+    color = "red",
+    se = FALSE
+  ) +
+  labs(title = "Scatterplot of Population Density vs Murder", x = "Population Density", y = "Murder")
+
+ggplot(observation_data,
+       aes(x = population_density, y = `Attempted murder`, color = Station)) +
+  geom_point() +
+  geom_smooth(
+    method = lm,
+    linewidth = 1,
+    color = "red",
+    se = FALSE
+  ) +
+  labs(title = "Scatterplot of Population Density vs Attempted murder", x = "Population Density", y = "Attempted murder")
+
+ggplot(
+  observation_data,
+  aes(x = population_density, y = `Assault with the intent to inflict grievous bodily harm`, color = Station)
+) +
+  geom_point() +
+  geom_smooth(
+    method = lm,
+    linewidth = 1,
+    color = "red",
+    se = FALSE
+  ) +
+  labs(title = "Scatterplot of Population Density vs Assault with the intent to inflict grievous bodily harm", x = "Population Density", y = "Assault with the intent to inflict grievous bodily harm")
+
+ggplot(observation_data,
+       aes(x = population_density, y = `Sexual Offences`, color = Station)) +
+  geom_point() +
+  geom_smooth(
+    method = lm,
+    linewidth = 1,
+    color = "red",
+    se = FALSE
+  ) +
+  labs(title = "Scatterplot of Population Density vs Sexual Offences", x = "Population Density", y = "Sexual Offences")
+```
+
+```{r}
+summary(lm(Murder ~ population_density, data = observation_data))
+summary(lm(`Attempted murder` ~ population_density, data = observation_data))
+summary(lm(`Assault with the intent to inflict grievous bodily harm` ~ population_density, data = observation_data))
+summary(lm(`Sexual Offences` ~ population_density, data = observation_data))
+```
+
+Looking at these graphs, we can clearly see a strong, positive correlation between Population Density and Violent Crimes. As Population Density increases, Violent Crimes increase. This is supported by the evidence of low p-values for each relationship.
+
+#### Population size vs Violent Crimes
+
+```{r}
+ggplot(observation_data, aes(x = population, y = Murder, color = Station)) +
+  geom_point() +
+  geom_smooth(
+    method = lm,
+    linewidth = 1,
+    color = "red",
+    se = FALSE
+  ) +
+  labs(title = "Scatterplot of Population vs Murder", x = "Population", y = "Murder")
+
+ggplot(observation_data,
+       aes(x = population, y = `Attempted murder`, color = Station)) +
+  geom_point() +
+  geom_smooth(
+    method = lm,
+    linewidth = 1,
+    color = "red",
+    se = FALSE
+  ) +
+  labs(title = "Scatterplot of Population vs Attempted murder", x = "Population", y = "Attempted murder")
+
+ggplot(
+  observation_data,
+  aes(x = population, y = `Assault with the intent to inflict grievous bodily harm`, color = Station)
+) +
+  geom_point() +
+  geom_smooth(
+    method = lm,
+    linewidth = 1,
+    color = "red",
+    se = FALSE
+  ) +
+  labs(title = "Scatterplot of Population vs Assault with the intent to inflict grievous bodily harm", x = "Population", y = "Assault with the intent to inflict grievous bodily harm")
+
+ggplot(observation_data,
+       aes(x = population, y = `Sexual Offences`, color = Station)) +
+  geom_point() +
+  geom_smooth(
+    method = lm,
+    linewidth = 1,
+    color = "red",
+    se = FALSE
+  ) +
+  labs(title = "Scatterplot of Population vs Sexual Offences", x = "Population", y = "Sexual Offences")
+```
+
+```{r}
+summary(lm(Murder ~ population, data = observation_data))
+summary(lm(`Attempted murder` ~ population, data = observation_data))
+summary(lm(`Assault with the intent to inflict grievous bodily harm` ~ population, data = observation_data))
+summary(lm(`Sexual Offences` ~ population, data = observation_data))
+```
+
+Looking at these graphs, we can see that there is some correlation between Population size and violent crimes. Therefore, in some cases, population size could affect the occurrence of voilent crimes. This is also shown by the p-values.
+
+#### Percentage of the population that have passed Matric (over 20 years old) vs Voilent Crimes
+
+```{r}
+ggplot(observation_data,
+       aes(x = matric_20plus, y = Murder, color = Station)) +
+  geom_point() +
+  labs(title = "Scatterplot of matric_20plus vs Murder", x = "matric_20plus", y = "Murder")
+
+ggplot(observation_data,
+       aes(x = matric_20plus, y = `Attempted murder`, color = Station)) +
+  geom_point() +
+  labs(title = "Scatterplot of matric_20plus vs Attempted murder", x = "matric_20plus", y = "Attempted murder")
+
+ggplot(
+  observation_data,
+  aes(x = matric_20plus, y = `Assault with the intent to inflict grievous bodily harm`, color = Station)
+) +
+  geom_point() +
+  labs(title = "Scatterplot of matric_20plus vs Assault with the intent to inflict grievous bodily harm", x = "matric_20plus", y = "Assault with the intent to inflict grievous bodily harm")
+
+ggplot(observation_data,
+       aes(x = matric_20plus, y = `Sexual Offences`, color = Station)) +
+  geom_point() +
+  labs(title = "Scatterplot of matric_20plus vs Sexual Offences", x = "matric_20plus", y = "Sexual Offences")
+```
+
+```{r}
+summary(lm(Murder ~ matric_20plus, data = observation_data))
+summary(lm(`Attempted murder` ~ matric_20plus, data = observation_data))
+summary(lm(`Assault with the intent to inflict grievous bodily harm` ~ matric_20plus, data = observation_data))
+summary(lm(`Sexual Offences` ~ matric_20plus, data = observation_data))
+```
+
+Looking at these graphs, we can see that there is no correlation between the percentage of the population that has passed Matric (over 20 years old) and Voilent Crimes. This means that education levels have little effect on the amount of violent crimes committed. This is also shown by the p-values being higher than 0,05.
+
+#### Recommendations
+
+In order to reduce violent crimes, focus should be put on reducing population dense areas. This could be done by the Government offering incentives to people to move to less population dense areas. The Government could also increase access to affordable housing out of these dense areas, making it more affordable for people to move. These strategies are long term solutions, as it will take a while to see the results of these implementations.
