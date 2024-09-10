@@ -1,0 +1,621 @@
+---
+title: "Assignment 3"
+format: html
+editor: visual
+---
+
+# Assignment 3
+
+```{r}
+#| echo: false
+#| message: false
+library(dplyr)
+library(tidyverse)
+library(tidytext)
+library(stringr)
+library(ggplot2)
+library(knitr)
+library(treemapify)
+library(textdata)
+library(tokenizers)
+library(sentimentr)
+library(gridExtra)
+library(textdata)
+library(topicmodels)
+library(tm)
+library(ldatuning)
+library(udpipe)
+library(Matrix)
+library(textmineR)
+library(stm)
+library(textmineR)
+library(viridis)
+
+MainData <- read_csv("IS_publications_2011_2020 2.csv")
+
+```
+
+## Most Commonly Used Words
+
+## Titles and Abstracts
+
+In the graphs below we have analysed our data to find the most commonly occurring words. Seeing that information was the most occurring word in the Academic Writings, being found over 15 000 times in the Abstracts and almost 2500 times in the Titles.This is to be expected as we are focusing on understanding Information Systems. The rest of the words help us to understand the topics that are being discussed in the information systems field. This being that the field encompasses knowledge on using technology to analyse data, create data processing models and understanding how business systems work.
+
+```{r}
+#| echo: false
+#| message: false
+tidy_data <- MainData  |> 
+  select(Abstract) |> 
+  distinct() |> 
+  mutate(line = 1:n())  |> 
+  unnest_tokens(word, Abstract)  |> 
+  anti_join(stop_words, by = "word")
+
+tidy_title <- MainData |> 
+  select(Title) |> 
+  distinct() |> 
+  mutate(line = 1:n()) |> 
+  unnest_tokens(word, Title) %>%
+  anti_join(stop_words, by = "word")
+
+AbstractWords <- tidy_data %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 5000) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col(fill = "#7b9eae", color = "black") +
+  labs(y = NULL, title = "Abstract") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 8))
+
+
+TitleWords <- tidy_title %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 700) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col(fill = "#f9d276", color = "black") +
+  labs(y = NULL, title = "Title") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 8))
+
+
+grid.arrange(TitleWords, AbstractWords, nrow = 1)
+```
+
+### Top Index Keywords
+
+In the Index Keywords data there are numerous words used to describe the main points that are addressed in their relevant articles.These main points being: understanding what information systems are from a collaborative perspective, whether it be through surveys or multiple authors.
+
+```{r}
+#| echo: false
+#| message: false
+topic <- MainData |>
+  separate_rows(index_keywords, sep = "; ")
+
+top_keywords <- topic |>
+  count(index_keywords, sort = TRUE) |>
+  top_n(15, wt = n)
+
+
+ggplot(top_keywords,
+       aes(area = n, fill = index_keywords, label = index_keywords)) +
+  geom_treemap() +
+  geom_treemap_text(
+    fontface = "italic",
+    color = "white",
+    place = "centre",
+    grow = TRUE
+  ) +
+  theme_void() +
+  guides(fill = "none") +
+  labs(title = 'Top Keywords Treemap')
+```
+
+## Average Sentiment Of All Articles
+
+Here we create a graph to show the average sentiment of all the articles, the sentiment analysis, also known as opinion mining, is a Natural Language Processing (NLP) technique which is used to try determine the emotional tone which is conveyed by a piece of text. This graph shows that there is a positive average sentiment as the density is high between 0 and 0.6 meaning that most academic writings have positive trends.
+
+```{r}
+#| echo: false
+#| message: false
+
+AvgSentimentAll <-
+  MainData |> select(Title , Abstract , cited_by , Year)
+
+
+AvgSentimentAll <- AvgSentimentAll |>  get_sentences(Abstract) |>
+  sentiment_by(
+    by = 'Title' ,
+    polarity_dt = lexicon::hash_sentiment_jockers_rinker,
+    valence_shifters_dt = lexicon::hash_valence_shifters,
+    amplifier.weight = 2,
+    n.before = 3,
+    n.after = 3,
+    question.weight = 0,
+    neutral.nonverb.like = TRUE
+  )
+
+AvgSentimentAll |> ggplot(aes(x = ave_sentiment)) +
+  geom_density() +
+  theme_minimal()
+```
+
+## Most Productive Authors and Journals
+
+### Top 10 Most Active Authors
+
+This table displays the top 10 most active authors in the field. This is based purely on the number of writings released not on citations. Therefore this means that these are the most active authors in the field.
+
+```{r}
+#| echo: false
+#| message: false
+
+SeperateAuthors <- MainData |> select(Authors)
+SeperateAuthors <-
+  separate_rows(SeperateAuthors, Authors, sep = ",\\s*")
+SeperateAuthors <- SeperateAuthors |> mutate(Count = 1)
+SeperateAuthors <-
+  SeperateAuthors |>  group_by(Authors) |> summarise(`Articles Written` = sum(Count)) |> arrange(desc(`Articles Written`))
+
+kable(head(SeperateAuthors , 10))
+
+```
+
+### Top 10 Most Cited Authors
+
+These authors are the most cited meaning that they are the most credible.
+
+```{r}
+#| echo: false
+#| message: false
+
+MostCited <- MainData |> select(Authors , Title , cited_by)
+MostCited <- separate_rows(MostCited, Authors, sep = ",\\s*")
+MostCited <-
+  MostCited |>  group_by(Authors) |> summarise(`Total Citations` = sum(cited_by)) |> arrange(desc(`Total Citations`))
+
+
+
+kable(head(MostCited , 10))
+
+```
+
+it is interesting to see that the most productive authors based on the amount of articles published does not necessarily have a strong correlation to the top authors based on citations. Meaning that most cited authors produce the most valuable content in the field. Content therefore does not necessarily produce quality in this study.
+
+### Most productive journals
+
+This shows the most productive journals by looking at which journal has the most articles and then showing how many citations they have received, you can see here that Information Systems Research (which are all words found most commonly in the article names and contents) has 567 Articles and 32130 citations.
+
+```{r}
+#| echo: false
+#| message: false
+journal <- MainData |>
+  filter(pub_type == "journal") |>
+  group_by(source_title) |>
+  summarise(Total_Articles = n(),
+            Total_Citations = sum(cited_by, na.rm = TRUE)) |>
+  mutate(Total_Citations = ifelse(is.na(Total_Citations), 0, Total_Citations)) |>
+  arrange(desc(Total_Articles))
+kable(journal)
+```
+
+## Prevalent words for the past 10 years
+
+## Tonality
+
+When looking at the two graphs, we wanted to compare the different emotions that have been displayed in the years 2011 to 2015 and from 2016 to 2020. As you can see there isn't a large difference between the two, they both have positive average sentiments, but the years 2011 to 2015 do not have as much density at the peak of the graph compared to 2016 - 2020. The higher density shows a stronger sentiment in the positive region.
+
+```{r}
+#| echo: false
+#| message: false
+
+
+
+sentiments <- MainData  |> select(Year , Title , Abstract)
+
+sentiments <-
+  sentiments |>  mutate(YearRange = ifelse(Year > 2015 , "2016 - 2020" , "2011 - 2015")) |>  arrange(Year)
+
+sentiments16_20 <- sentiments |> filter(YearRange == "2016 - 2020")
+sentiments11_15 <- sentiments |> filter(YearRange == "2011 - 2015")
+
+sentiments16_20 <- sentiments16_20 |>  get_sentences(Abstract) |>
+  sentiment_by(
+    by = 'Title' ,
+    polarity_dt = lexicon::hash_sentiment_jockers_rinker,
+    valence_shifters_dt = lexicon::hash_valence_shifters,
+    amplifier.weight = 2,
+    n.before = 3,
+    n.after = 3,
+    question.weight = 0,
+    neutral.nonverb.like = TRUE
+  )
+
+sentiments11_15 <- sentiments11_15 |>  get_sentences(Abstract) |>
+  sentiment_by(
+    by = 'Title' ,
+    polarity_dt = lexicon::hash_sentiment_jockers_rinker,
+    valence_shifters_dt = lexicon::hash_valence_shifters,
+    amplifier.weight = 2,
+    n.before = 3,
+    n.after = 3,
+    question.weight = 0,
+    neutral.nonverb.like = TRUE
+  )
+
+graph1 <- sentiments11_15 |> ggplot(aes(x = ave_sentiment)) +
+  geom_density(fill = "blue", alpha = 0.5) +
+  theme_minimal() +
+  labs(title = "Years 2011 - 2015")
+
+graph2 <- sentiments16_20 |> ggplot(aes(x = ave_sentiment)) +
+  geom_density(fill = "red", alpha = 0.5) +
+  theme_minimal() +
+  labs(title = "Years 2016 - 2020")
+
+grid.arrange(graph1, graph2)
+```
+
+### Sentiment Analysis Top Cited Articles
+
+#### Top 50 Cited Articles General Sentiments Per Year
+
+```{r}
+#| echo: false
+#| message: false
+
+top_cited_abstracts_py <-
+  MainData |> select(Title , Abstract , cited_by , Year)
+
+top_cited_abstracts_py <- top_cited_abstracts_py |>
+  group_by(Year) |>
+  top_n(100, wt = cited_by)
+
+top_cited_abstracts_py <-
+  top_cited_abstracts_py |>  get_sentences(Abstract) |>
+  sentiment_by(
+    by = 'Year' ,
+    polarity_dt = lexicon::hash_sentiment_jockers_rinker,
+    valence_shifters_dt = lexicon::hash_valence_shifters,
+    amplifier.weight = 2,
+    n.before = 3,
+    n.after = 3,
+    question.weight = 0,
+    neutral.nonverb.like = TRUE
+  )
+
+
+top_cited_abstracts_py <- top_cited_abstracts_py |>
+  mutate(ave_sentiment = general_rescale(
+    ave_sentiment,
+    lower = -1,
+    upper = 1,
+    keep.zero = TRUE
+  ))
+
+
+top_cited_abstracts_py <- top_cited_abstracts_py |>
+  left_join(sentiments, by = "Year") |>
+  mutate(Year = as.factor(Year))  |> arrange(Year)
+
+
+color <-
+  ifelse(top_cited_abstracts_py$ave_sentiment < 0, "pink", "lightblue")
+
+top_cited_abstracts_py |>
+  group_by(Year) |>
+  ggplot(aes(x = Year, y = ave_sentiment)) +
+  geom_hline(yintercept = 0, linetype = 4) +
+  geom_col(fill = color) +
+  labs(
+    x = "Year",
+    y = "Sentiment",
+    title = "Sentiment",
+    subtitle = "By Year"
+  ) +
+  coord_flip() +
+  theme_minimal() +
+  theme(panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank())
+```
+
+Here we show a summarized version of the sentiment of each year. We took the top 50 cited articles and worked out their sentiment for each year, this was done to indicate different feelings each year about Information Technology. You can see that 2011 was the highest sentiment, this could be due to the fact that Siri was released that year, the earlier version of AI, this would have spiked excitement around AI and technology in general. The second major spike is witnessed in 2014, this could be due to the fact that the new apple watch was released that year, yet again bringing excitement to the technology industry
+
+### Top Cited Author Thong J.Y.L. General Sentiment
+
+All Articles are generally positive as most of them reside between 0 and 5 therefore Thong J.Y.L. has a positive view on information systems and as the most reliable authors due to him being the top cited author this shows us that we can trust his judgement.
+
+```{r}
+#| echo: false
+#| message: false
+
+Thong <- MainData |>
+  select(Authors, Title, Abstract) |>
+  separate_rows(Authors, sep = ",\\s*") |>
+  filter(Authors == "Thong J.Y.L.") |>
+  mutate(line = row_number()) |>
+  unnest_tokens(word, Abstract)
+
+Thong <- Thong |>
+  anti_join(stop_words, by = c("word" = "word"))
+
+Thong_sentiment <- Thong |>
+  inner_join(get_sentiments("bing"), by = "word") |>
+  count(Title, sentiment) |>
+  pivot_wider(names_from = sentiment,
+              values_from = n,
+              values_fill = 0) |>
+  mutate(sentiment = positive - negative)
+
+Thong_summary <- Thong_sentiment |>
+  summarise(sentiment = sum(sentiment))
+
+# Plot the density of sentiment scores
+ggplot(Thong_sentiment, aes(x = sentiment)) +
+  geom_density(fill = "skyblue", alpha = 0.7) +
+  labs(title = "Density of Sentiments Across All Articles by Thong J.Y.L.",
+       x = "Sentiment Score",
+       y = "Density") +
+  theme_minimal()
+```
+
+This graph is shown to show you that with a positive sentiment score there is still possibility of negative scores showing. This is a sentiment score for Thong J.Y.L, who was the top cited article. This graph proves that positive articles were cited more than negative ones, which references the overall sentiment scores.
+
+#### Analyzing Each Articles Sentiments written by Thong J.Y.L.
+
+```{r}
+#| echo: false
+#| message: false
+
+Thong <- MainData |>
+  select(Authors, Title, Abstract) |>
+  separate_rows(Authors, sep = ",\\s*") |>
+  filter(Authors == "Thong J.Y.L.") |>
+  mutate(line = row_number()) |>
+  unnest_tokens(word, Abstract)
+
+Thong <- Thong |>
+  anti_join(stop_words, by = c("word" = "word"))
+
+Thong_sentiment <- Thong |>
+  inner_join(get_sentiments("bing"), by = "word") |>
+  count(Title, sentiment) |>
+  pivot_wider(names_from = sentiment,
+              values_from = n,
+              values_fill = 0) |>
+  mutate(sentiment = positive - negative)
+
+Thong_avg_sentiment <- Thong_sentiment |>
+  mutate(average_sentiment = (positive - negative) / (positive + negative)) |>
+  select(Title, average_sentiment)
+
+
+wrap_text <- function(text, width = 55) {
+  str_wrap(text, width = width)
+}
+
+
+Thong_avg_sentiment$Title_wrapped <-
+  wrap_text(Thong_avg_sentiment$Title)
+
+
+ggplot(Thong_avg_sentiment,
+       aes(x = Title_wrapped, y = average_sentiment)) +
+  geom_col(fill = ifelse(
+    Thong_avg_sentiment$average_sentiment >= 0,
+    "lightblue",
+    "pink"
+  )) +
+  labs(title = "Average Sentiment Scores Across Articles by Thong J.Y.L.",
+       x = "Article Title",
+       y = "Average Sentiment") +
+  coord_flip() +
+  scale_y_continuous(limits = c(-1, 1)) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(
+      angle = 0,
+      hjust = 1,
+      vjust = 0.5,
+      size = 6
+    ),
+    plot.title = element_text(hjust = 0, size = 12)
+  )
+```
+
+### 
+
+Here is a different way of viewing the same information as earlier, this way you can see the two articles which were negative, allowing you to try understand why they were negative but keeping perspective on how majority of the articles are positive.
+
+### CTM Topic Modelling
+
+Here we are running a Latent Dirichlet Allocation (LDA) , it is a general probabilistic model which is used in natural language processing (NLP) for topic modeling. It tries to uncover hidden thematic structures in collections of documents.
+
+What we have done here is firstly, process the data and count the number of occurrences of each word within the lines. We also filter out any words beginning with digits to get rid of random numbers without removing words such as Covid19.
+
+We then create a document term matrix, consisting of the lines of text, the words extracted from the text, and the count of each words occurrences.
+
+After that we create the LDA model, specifying that we want 5 topics to be identified.
+
+Finally we plot the LDA models, to show for the 5 samples, the most relevant words according to their beta (which is their term weight). This is used to re-enforce what was said earlier about studies, research and information being a large part of the articles.
+
+```{r}
+#| echo: false
+#| message: false
+
+
+matrix <- tidy_data |>
+  mutate(count = 1) |>
+  group_by(line, word) |>
+  summarise(Count = sum(count), .groups = "drop") |>
+  filter(!grepl("^\\d", word))
+
+dtm <- matrix |>
+  cast_dtm(line, word, Count)
+
+lda_model <- LDA(dtm, k = 5, control = list(seed = 45))
+
+top_terms <- tidy(lda_model, matrix = "beta") |>
+  group_by(topic) |>
+  slice_max(beta, n = 10) |>
+  ungroup() |>
+  arrange(topic,-beta) |>
+  mutate(term = reorder_within(term, beta, topic))
+
+ggplot(top_terms, aes(beta, term, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap( ~ topic, scales = "free") +
+  scale_y_reordered() +
+  labs(title = "Top Terms by Topic", x = "Beta", y = "Term") +
+  theme_minimal()
+```
+
+From doing this we can understand general themes in these articles being:
+
+Topic 1: Focuses on the study of information systems in a business environment. Which entails handling and processing data.
+
+Topic 2: Focuses on research based on social systems gathered from data to analyse users needs and behaviors so that we can formulate quantitative data on these factors to increase social knowledge.
+
+Topic 3: More ethical focus on usage of information systems in businesses, this focuses on users rights and ethical practices in handling user data and information. We use this information to model data to leverage our understanding of customer needs.
+
+Topic 4: Information gathered through research processes in information systems helps in the development and advancements of models and platforms that protects individual rights.
+
+Topic 5: This focuses on building social models based on the development of information system theories. resulting in service development.
+
+\
+
+```{r}
+#| echo: false
+#| message: false
+
+#Run line below once only to install Udpipe
+#udpipe_download_model(language = "english")
+
+
+over_500_citations <-
+  MainData |> filter(cited_by >= 500) |> select(Title , Abstract , id)
+over_500_citations <- over_500_citations |> ungroup()
+
+over_500_citations <-
+  over_500_citations |> group_by(Title , Abstract) |>
+  summarise_at(vars(-group_cols()) , str_c , collapse = " ")
+
+
+
+
+
+
+english_language_model <-
+  udpipe_load_model(file = "english-ewt-ud-2.5-191206.udpipe")
+
+data_tokenised <-
+  as.data.frame(
+    udpipe_annotate(
+      english_language_model,
+      x = over_500_citations$Abstract,
+      doc_id = over_500_citations$id,
+      tokenizer = "tokenizer",
+      tagger = c("default", "none"),
+      parser = "none",
+      trace = FALSE
+    )
+  )
+
+data_tokenised <- data_tokenised |>
+  filter(xpos %in% c("NN", "NNS", "NNPS", "NNP")) |>
+  filter(str_length(lemma) > 3) |>
+  select(doc_id, sentence_id, sentence, token, lemma, xpos)
+
+data_tokenised <- data_tokenised |>
+  filter(!grepl("[[:digit:]]", lemma))
+
+data_words <- data_tokenised |>
+  count(doc_id, lemma, sort = TRUE)
+
+data_tf_idf <- data_words |>
+  bind_tf_idf(lemma, doc_id, n)
+
+data_dtm <- data_tf_idf |>
+  cast_dtm(doc_id, lemma, n)
+
+data_lda <- LDA(data_dtm, k = 10, control = list(seed = 1234))
+
+data_topics <- tidy(data_lda, matrix = "beta")
+
+
+
+data_topics |>
+  group_by(topic) |>
+  slice_max(beta, n = 10) |>
+  ungroup() |>
+  arrange(topic,-beta) |>
+  mutate(term = reorder_within(term, beta, topic)) |>
+  ggplot(aes(beta, term,
+             fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap( ~ topic,
+              scales = "free") + #set ncol = 4 if more topics
+  scale_y_reordered() +
+  labs(title = "Top 10 terms in each CTM topic",
+       x = expression(beta), y = NULL) +
+  theme_minimal()
+
+processedDataforSTM <-
+  MainData |> select(id , Abstract , Title, cited_by , Year , document_type) |> filter(cited_by > 500)
+processedDataforSTM <-
+  processedDataforSTM |> mutate(Year = as.integer(Year),
+                                cited_by = as.character(cited_by))
+
+processedDataforSTM$id <-  gsub("^ID", "", processedDataforSTM$id)
+
+processedDataforSTM <-
+  processedDataforSTM |> mutate(id = as.integer(id))
+
+
+processedSTM <-
+  textProcessor(processedDataforSTM$Abstract, metadata = processedDataforSTM)
+
+out <-
+  prepDocuments(processedSTM$documents,
+                processedSTM$vocab,
+                processedSTM$meta)
+
+docs <- out$documents
+vocab <- out$vocab
+meta <- out$meta
+
+
+test_STM <- stm(
+  documents = out$documents,
+  vocab = out$vocab,
+  K = 10,
+  prevalence = ~ Abstract + s(Year),
+  max.em.its = 75,
+  data = out$meta,
+  init.type = "Spectral",
+  verbose = FALSE
+)
+
+plot(test_STM)
+```
+
+Topic 1: Research on the Unified Theory of Acceptance and Use of Technology (UTAUT) emphasizes the value of understanding user intentions for successful technology adoption and purchase decisions.
+
+Topic 2: This topic touches on the service innovation where actors view themselves as playing an integral part in larger networks not merely as customers. This can be further explored through use cases. Exchange in knowledge is highlighted as important for collaboration.
+
+Topic 3: Research in the area of technology constantly explores innovation, creating frameworks to address issues and maximise value creation.
+
+Topic 4: Agility in research methods is key to achieving alignment between artifacts and performance outcomes. The effective linking of information with flexible infrastructures improves the methods flexibility, which will enhance the desired effects.
+
+Topic 5: Agility in capability development is crucial for businesses to adapt to consumer needs at scale. Constructing effective communication channels and leveraging information in development processes are essential strategies for achieving this agility.
+
+Topic 6: In business strategies, the theme of information capitalism relates to the influence of technology and surveillance. Employing Partial Least Squares (PLSs) as a path to estimate implications, firms navigate the landscape of data-driven decision-making.
+
+Topic 7: The contribution of data-driven knowledge models is pivotal in the era of digitization, where businesses leverage crowdsourced analytics to understand consumer behavior.
+
+Topic 8: In media, effective information management is a critical capability for optimizing performance and creating research-driven transformation. Understanding the implications of networked systems is essential for understanding the complexities of modern information ecosystems.
+
+Topic 9: In research, the model's analytic power comes from its ability to assess collinearity and effectively model the complexities of technostress. Analyzing the role of technology in the workplace requires a subtly complex approach, integrating information assessment to understand stressors and their impacts.
+
+Topic 10: Privacy concerns have become a focal point in research, especially within information-rich platforms. Developing a taxonomy to classify these concerns is crucial for studies aiming to understand privacy implications in platform development and research papers seeking to address this evolving landscape.
